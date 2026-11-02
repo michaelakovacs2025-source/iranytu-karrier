@@ -1,8 +1,29 @@
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          theme?: 'auto' | 'light' | 'dark';
+        }
+      ) => string;
+      remove: (widgetId: string) => void;
+      getResponse: (widgetId?: string) => string;
+      reset: (widgetId?: string) => void;
+    };
+  }
+}
+
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Router as WouterRouter, useLocation } from 'wouter';
 import { ArrowRight, ChevronDown, Menu, X } from 'lucide-react';
 import { videos } from './data/videos';
 import { privacyPageCopy } from './data/privacy';
+
+const TURNSTILE_SITE_KEY = "0x4AAAAAAFvbobTeN6uJCE6z";
+const turnstileWidgetIds: Record<string, string> = {};
 
 type Language = 'hu' | 'de' | 'en';
 type PageKey = 'home' | 'about' | 'career' | 'mentoring' | 'supervision' | 'workshops' | 'prices' | 'articles' | 'videos' | 'faq' | 'contact' | 'privacy' | 'imprint';
@@ -414,33 +435,127 @@ function Site() {
     document.documentElement.lang = lang;
   }, [key, lang, t]);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const values = new FormData(event.currentTarget);
-    const preference = values.get('preference') === 'phone' ? t.phonePref : t.emailPref;
-    const subject = `${t.brand} — ${t.formTitle}`;
-    const body = [
-      `${t.name}: ${String(values.get('name') ?? '')}`,
-      `${t.email}: ${String(values.get('email') ?? '')}`,
-      `${t.need}: ${String(values.get('need') ?? '')}`,
-      `${t.preference}: ${preference}`,
-    ].join('\n');
-    window.location.href = `mailto:${contactAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setFormSent(true);
-  };
+  
+  
+const submit = async (event: FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
 
-  const submitNewsletter = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const values = new FormData(event.currentTarget);
-    const body = [
-      `${t.name}: ${String(values.get('name') ?? '')}`,
-      `${t.email}: ${String(values.get('email') ?? '')}`,
-      '',
-      t.newsletterRequest,
-    ].join('\n');
-    window.location.href = `mailto:${contactAddress}?subject=${encodeURIComponent(t.newsletterTitle)}&body=${encodeURIComponent(body)}`;
+  const form = event.currentTarget;
+  const values = new FormData(form);
+  const turnstileToken = window.turnstile?.getResponse(
+  turnstileWidgetIds["contact-turnstile"]
+);
+
+  if (!turnstileToken) {
+    alert(
+      "Kérlek, végezd el a biztonsági ellenőrzést az üzenet elküldése előtt."
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "https://iranytu-kapcsolat.michaela-kovacs2025.workers.dev/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "contact",
+          name: String(values.get("name") ?? ""),
+          email: String(values.get("email") ?? ""),
+          message: String(values.get("need") ?? ""),
+          preference: String(values.get("preference") ?? "email"),
+          turnstileToken,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Az üzenetküldés sikertelen.");
+    }
+
+    setFormSent(true);
+    form.reset();
+    window.turnstile?.reset(
+  turnstileWidgetIds["contact-turnstile"]
+);
+  } catch (error) {
+    console.error("Kapcsolatfelvételi hiba:", error);
+    alert(
+      "Nem sikerült elküldeni az üzenetet. Kérlek, próbáld újra később."
+    );
+    window.turnstile?.reset(
+  turnstileWidgetIds["contact-turnstile"]
+);
+  }
+};
+
+
+  
+const submitNewsletter = async (event: FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
+
+  const form = event.currentTarget;
+  const values = new FormData(form);
+
+  const name = String(values.get("name") ?? "").trim();
+  const email = String(values.get("email") ?? "").trim();
+  const consent = values.get("newsletterConsent") === "on";
+
+  if (!consent) {
+    alert("A feliratkozáshoz hozzájárulás szükséges.");
+    return;
+  }
+
+  const turnstileToken = window.turnstile?.getResponse(
+  turnstileWidgetIds["newsletter-turnstile"]
+);
+
+  if (!turnstileToken) {
+    alert("Kérlek, végezd el a biztonsági ellenőrzést.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "https://iranytu-kapcsolat.michaela-kovacs2025.workers.dev/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "newsletter",
+          name,
+          email,
+          newsletterConsent: consent,
+          turnstileToken,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Sikertelen feliratkozási kérelem.");
+    }
+
     setNewsletterPrepared(true);
-  };
+    form.reset();
+    window.turnstile?.reset(
+  turnstileWidgetIds["newsletter-turnstile"]
+);
+
+    alert("A feliratkozási kérelmedet sikeresen elküldtük!");
+  } catch (error) {
+    console.error("Hírlevélküldési hiba:", error);
+    alert("Nem sikerült elküldeni a kérelmet. Próbáld újra később.");
+    window.turnstile?.reset(
+  turnstileWidgetIds["contact-turnstile"]
+);
+  }
+};
+
 
   const menuLinks = (items: MenuPage[]) => items.map((item) => (
     <AppLink key={item} lang={lang} page={item} data-testid={`menu-link-${item}`}>{t.nav[item]}</AppLink>
@@ -562,7 +677,122 @@ function Home({ lang, t }: { lang: Language; t: Translation }) {
   </>;
 }
 
-function Page({ lang, t, page, onSubmit, formSent }: { lang: Language; t: Translation; page: NonHomePage; onSubmit: (event: FormEvent<HTMLFormElement>) => void; formSent: boolean }) {
+
+function Page({
+  lang,
+  t,
+  page,
+  onSubmit,
+  formSent,
+  onNewsletterSubmit,
+  newsletterPrepared,
+}: {
+  lang: Language;
+  t: Translation;
+  page: NonHomePage;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  formSent: boolean;
+  onNewsletterSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  newsletterPrepared: boolean;
+}) {
+
+  
+useEffect(() => {
+  if (page !== 'contact') return;
+
+  let cancelled = false;
+  const widgetIds: string[] = [];
+  const widgetIdsByContainer: Record<string, string> = {};
+
+  const initializeTurnstile = () => {
+    if (cancelled || !window.turnstile) return;
+
+    const containers = [
+      'contact-turnstile',
+      'newsletter-turnstile',
+    ];
+
+    for (const containerId of containers) {
+      const container = document.getElementById(containerId);
+
+      if (!container) continue;
+
+      const widgetId = window.turnstile.render(container, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: 'auto',
+      });
+
+      widgetIds.push(widgetId);
+      widgetIdsByContainer[containerId] = widgetId;
+      turnstileWidgetIds[containerId] = widgetId;
+    }
+  };
+
+  const interval = window.setInterval(() => {
+    if (
+      window.turnstile &&
+      document.getElementById('contact-turnstile') &&
+      document.getElementById('newsletter-turnstile')
+    ) {
+      window.clearInterval(interval);
+      initializeTurnstile();
+    }
+  }, 200);
+
+  return () => {
+    cancelled = true;
+    delete turnstileWidgetIds["contact-turnstile"];
+delete turnstileWidgetIds["newsletter-turnstile"];
+    window.clearInterval(interval);
+
+    for (const widgetId of widgetIds) {
+      window.turnstile?.remove(widgetId);
+    }
+  };
+}, [page]);
+const [youtubeVideos, setYoutubeVideos] = useState<
+  {
+    id: string;
+    title: string;
+    thumbnail: string;
+    url: string;
+    published: string;
+  }[]
+>([]);
+
+useEffect(() => {
+  if (page !== "videos") return;
+
+  const controller = new AbortController();
+
+  const loadVideos = async () => {
+    try {
+      const response = await fetch(
+        "https://iranytu-youtube.michaela-kovacs2025.workers.dev/",
+        { signal: controller.signal }
+      );
+
+      if (!response.ok) {
+        throw new Error("Nem sikerült lekérni a videókat.");
+      }
+
+      const data = await response.json();
+
+      if (!controller.signal.aborted) {
+        setYoutubeVideos(data.videos);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.error("YouTube-videók lekérési hibája:", error);
+      }
+    }
+  };
+
+  loadVideos();
+
+  return () => controller.abort();
+}, [page]);
+
   const title = t.page[page][0];
   const subtitle = t.page[page][1];
   const playableVideos = (videos as VideoResource[]).flatMap((video) => {
@@ -627,14 +857,158 @@ function Page({ lang, t, page, onSubmit, formSent }: { lang: Language; t: Transl
         {page === 'supervision' && <Article aside={t.page.supervision[0]}><h2 style={{ fontSize: 'clamp(18px, 2.3vw, 32px)', fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '-0.03em' }}>{t.page.supervision[0]}</h2><p className="supervision-lead">{t.page.supervision[1]}</p>{t.supervisionParagraphs.map((paragraph) => <p key={paragraph} style={{ marginBottom: '24px' }}>{paragraph}</p>)}<AppLink lang={lang} page="contact" className="button" style={{ marginTop: '32px' }} data-testid="button-supervision-contact">{t.linkContact}<ArrowRight size={16} /></AppLink></Article>}
         {page === 'prices' && <Article aside={t.sections.rates}><h2>{t.pricesTitle}</h2><PricePanel t={t} /><p>{t.priceExplain}</p><p>{lang === 'hu' ? 'Az első beszélgetés után te döntöd el, szeretnéd-e folytatni a közös munkát.' : lang === 'de' ? 'Nach dem Erstgespräch entscheidest du selbst, ob du die Zusammenarbeit fortsetzen möchtest.' : 'After the introductory call, you decide whether you would like to continue.'}</p><h2>{t.sections.goodToKnow}</h2><p>{t.trust}</p><AppLink lang={lang} page="contact" className="button" data-testid="button-pricing-contact">{t.linkIntro}<ArrowRight size={16} /></AppLink></Article>}
         {page === 'articles' && <Article aside={t.page.articles[0]}><p>{lang === 'hu' ? 'Hogyan találhatod meg a hozzád illő munkát? Hogyan ismerheted fel az erősségeidet? Mit tehetsz, ha a munkahelyi elvárások túl sok energiát igényelnek?' : lang === 'de' ? 'Wie findest du passende Arbeit? Wie erkennst du deine Stärken? Was kannst du tun, wenn berufliche Anforderungen zu viel Energie kosten?' : 'How can you find work that suits you? How can you recognise your strengths? What can help when work demands too much energy?'}</p><div className="resource-grid">{t.knowledge.map((name, i) => <article className="resource-card" key={name}><span className="eyebrow">{lang === 'hu' ? 'Útmutató' : lang === 'de' ? 'Perspektive' : 'Field note'} · 0{i + 1}</span><h3>{name}</h3><p>{t.knowledgeText[i]}</p></article>)}</div><h2>{t.sections.blog}</h2><p>{lang === 'hu' ? 'A cikkekben felvetett kérdéseket a saját helyzetedre is alkalmazhatod. Nem kell minden tanácsot magadra érvényesnek tekintened: azt keresd, ami neked valóban hasznos.' : lang === 'de' ? 'Du kannst die Fragen aus den Artikeln auf deine eigene Situation beziehen. Nicht jeder Hinweis muss für dich passen – nimm mit, was tatsächlich hilfreich ist.' : 'You can apply the questions in these articles to your own situation. Not every suggestion needs to fit; look for what is genuinely useful to you.'}</p><AppLink lang={lang} page="career" className="button secondary small" data-testid="link-articles-career">{t.allServices}<ArrowRight size={16} /></AppLink></Article>}
-        {page === 'videos' && <div className="video-library">
-          {playableVideos.length > 0 ? <div className="video-grid">{playableVideos.map((video) => <article className="video-card" key={video.url} data-testid="card-video"><div className="video-frame"><iframe src={video.embedUrl} title={video.title} loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div><div className="video-caption"><h2>{video.title}</h2><p>{video.description}</p><a href={video.url} target="_blank" rel="noopener noreferrer">{t.videoOpenOriginal}</a></div></article>)}</div> : <div className="coming-soon"><span className="eyebrow">{t.nav.library}</span><h2>{t.comingTitle}</h2><p>{t.comingText}</p><p className="video-instructions">{t.videoInstructions}</p></div>}
-          <div className="video-platform-links"><a className="button secondary small" href="https://studio.youtube.com/" target="_blank" rel="noopener noreferrer" data-testid="link-upload-youtube">{t.youtubeUpload}<ArrowRight size={15} /></a><a className="button secondary small" href="https://vimeo.com/manage/videos" target="_blank" rel="noopener noreferrer" data-testid="link-upload-vimeo">{t.vimeoUpload}<ArrowRight size={15} /></a></div>
-          <AppLink lang={lang} page="articles" className="text-link video-articles" data-testid="link-videos-articles">{t.nav.articles}<ArrowRight size={15} /></AppLink>
-        </div>}
+        
+{page === 'videos' && (
+  <div className="video-library">
+    {youtubeVideos.length > 0 ? (
+      <div
+        className="video-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: '24px',
+        }}
+      >
+        {youtubeVideos.map((video) => (
+          <article
+            className="video-card"
+            key={video.id}
+            data-testid="card-video"
+          >
+            <a
+              href={video.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                color: 'inherit',
+                textDecoration: 'none',
+              }}
+            >
+              <div
+                style={{
+                  position: 'relative',
+                  aspectRatio: '16 / 9',
+                  overflow: 'hidden',
+                  borderRadius: '14px',
+                  background: '#ECF1F1',
+                }}
+              >
+                <img
+                  src={video.thumbnail}
+                  alt={video.title}
+                  loading="lazy"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    background: 'rgba(0,0,0,0.75)',
+                    color: '#fff',
+                    padding: '12px 17px',
+                    borderRadius: '12px',
+                    fontSize: '20px',
+                  }}
+                  aria-hidden="true"
+                >
+                  ▶
+                </span>
+              </div>
+
+              <div className="video-caption">
+                <h2 style={{ fontSize: '17px', lineHeight: 1.4 }}>
+                  {video.title}
+                </h2>
+                <p style={{ fontSize: '13px', opacity: 0.7 }}>
+                  {video.published
+                    ? new Date(video.published).toLocaleDateString(
+                        lang === 'hu'
+                          ? 'hu-HU'
+                          : lang === 'de'
+                          ? 'de-DE'
+                          : 'en-US'
+                      )
+                    : ''}
+                </p>
+              </div>
+            </a>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div className="coming-soon">
+        <span className="eyebrow">{t.nav.library}</span>
+        <h2>{t.comingTitle}</h2>
+        <p>
+          {lang === 'hu'
+            ? 'Hamarosan itt jelennek meg a YouTube-csatornánk videói.'
+            : lang === 'de'
+            ? 'Hier erscheinen bald die Videos unseres YouTube-Kanals.'
+            : 'Videos from our YouTube channel will appear here soon.'}
+        </p>
+      </div>
+    )}
+
+    <div className="video-platform-links">
+      <a
+        className="button secondary small"
+        href="https://www.youtube.com/channel/UC6Cc5M2KPhuKr3Z2A4dr-Hg"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {lang === 'hu'
+          ? 'YouTube-csatorna megnyitása'
+          : lang === 'de'
+          ? 'YouTube-Kanal öffnen'
+          : 'Open YouTube channel'}
+        <ArrowRight size={15} />
+      </a>
+    </div>
+
+    <AppLink
+      lang={lang}
+      page="articles"
+      className="text-link video-articles"
+      data-testid="link-videos-articles"
+    >
+      {t.nav.articles}
+      <ArrowRight size={15} />
+    </AppLink>
+  </div>
+)}
+
         {page === 'faq' && <Article aside={t.page.faq[0]}><p>{lang === 'hu' ? 'Nem találod a kérdésed? Nem szükséges kész kérdéssel érkezned az első beszélgetésre.' : lang === 'de' ? 'Deine Frage ist nicht dabei? Du musst keine fertige Frage zum Erstgespräch mitbringen.' : 'Did not find your question? You do not need to arrive with a perfectly formed question.'}</p><div className="faq-list">{t.faqs.map(([question, answer], index) => <details className="faq-item" key={question}><summary data-testid={`faq-question-${index}`}>{question}</summary><div className="faq-answer">{answer}</div></details>)}</div><AppLink lang={lang} page="contact" className="button" style={{ marginTop: 28 }} data-testid="button-faq-contact">{t.linkContact}<ArrowRight size={16} /></AppLink></Article>}
-        {page === 'contact' && <div className="contact-grid"><aside className="contact-note"><span className="eyebrow" style={{ color: '#e1b6d9' }}>{t.introCta}</span><h2>{lang === 'hu' ? 'Díjmentes, 30 perces első beszélgetés' : lang === 'de' ? 'Kostenloses 30-minütiges Erstgespräch' : 'Free 30-minute introductory call'}</h2><p>{t.contactStep}</p><p>{t.noDiagnosis}</p><p><strong><a href={`mailto:${contactAddress}`}>{t.contactEmail}</a></strong></p><p><strong><a href="tel:+36305948322">+36 30 594 8322</a></strong></p></aside><form className="contact-form" onSubmit={onSubmit}><h2 style={{ font: "500 32px 'Newsreader',serif", color: 'var(--navy)', marginBottom: 22 }}>{t.formTitle}</h2><div className="field"><label htmlFor="contact-name">{t.name}</label><input id="contact-name" name="name" required autoComplete="name" data-testid="input-contact-name" /></div><div className="field"><label htmlFor="contact-email">{t.email}</label><input id="contact-email" type="email" name="email" required autoComplete="email" data-testid="input-contact-email" /></div><div className="field"><label htmlFor="contact-need">{t.need}</label><textarea id="contact-need" name="need" required data-testid="input-contact-message" /></div><div className="field"><label htmlFor="contact-pref">{t.preference}</label><select id="contact-pref" name="preference" data-testid="select-contact-preference"><option value="email">{t.emailPref}</option><option value="phone">{t.phonePref}</option></select></div><label className="consent"><input type="checkbox" required data-testid="checkbox-contact-consent" /><span>{t.consent} <AppLink lang={lang} page="privacy" data-testid="link-contact-privacy">{t.cookie}</AppLink></span></label><button className="button" type="submit" data-testid="button-submit-contact">{t.submit}<ArrowRight size={16} /></button>{formSent && <p className="form-state" role="status" data-testid="status-form-demo">{t.formNotice}</p>}</form></div>}
-        {page === 'contact' && <section style={{ marginTop: '60px', padding: '36px', background: '#ECF1F1', borderRadius: '20px' }}><h2>{t.newsletterTitle}</h2><p>{t.newsletterText}</p><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const body = `${t.name}: ${data.get('name')}\n${t.email}: ${data.get('email')}`; window.location.href = `mailto:michaela.kovacs2025@gmail.com?subject=${encodeURIComponent(t.newsletterTitle)}&body=${encodeURIComponent(body)}`; }} style={{ display: 'grid', gap: '18px', maxWidth: '520px', marginTop: '24px' }}><div className="field"><label htmlFor="newsletter-name">{t.name}</label><input id="newsletter-name" name="name" required autoComplete="name" /></div><div className="field"><label htmlFor="newsletter-email">{t.email}</label><input id="newsletter-email" name="email" type="email" required autoComplete="email" /></div><button type="submit" className="button">{t.newsletterSubmit}<ArrowRight size={16} /></button></form></section>}
+        {page === 'contact' && <div className="contact-grid"><aside className="contact-note"><span className="eyebrow" style={{ color: '#e1b6d9' }}>{t.introCta}</span><h2>{lang === 'hu' ? 'Díjmentes, 30 perces első beszélgetés' : lang === 'de' ? 'Kostenloses 30-minütiges Erstgespräch' : 'Free 30-minute introductory call'}</h2><p>{t.contactStep}</p><p>{t.noDiagnosis}</p><p><strong><a href={`mailto:${contactAddress}`}>{t.contactEmail}</a></strong></p><p><strong><a href="tel:+36305948322">+36 30 594 8322</a></strong></p></aside><form className="contact-form" onSubmit={onSubmit}><h2 style={{ font: "500 32px 'Newsreader',serif", color: 'var(--navy)', marginBottom: 22 }}>{t.formTitle}</h2><div className="field"><label htmlFor="contact-name">{t.name}</label><input id="contact-name" name="name" required autoComplete="name" data-testid="input-contact-name" /></div><div className="field"><label htmlFor="contact-email">{t.email}</label><input id="contact-email" type="email" name="email" required autoComplete="email" data-testid="input-contact-email" /></div><div className="field"><label htmlFor="contact-need">{t.need}</label><textarea id="contact-need" name="need" required data-testid="input-contact-message" /></div><div className="field"><label htmlFor="contact-pref">{t.preference}</label><select id="contact-pref" name="preference" data-testid="select-contact-preference"><option value="email">{t.emailPref}</option><option value="phone">{t.phonePref}</option></select></div><label className="consent"><input type="checkbox" required data-testid="checkbox-contact-consent" /><span>{t.consent} <AppLink lang={lang} page="privacy" data-testid="link-contact-privacy">{t.cookie}</AppLink></span></label><div
+  id="contact-turnstile"
+  style={{ marginTop: 16, marginBottom: 16 }}
+/><button className="button" type="submit" data-testid="button-submit-contact">{t.submit}<ArrowRight size={16} /></button>{formSent && <p className="form-state" role="status" data-testid="status-form-demo">{t.formNotice}</p>}</form></div>}
+        {page === 'contact' && <section style={{ marginTop: '60px', padding: '36px', background: '#ECF1F1', borderRadius: '20px' }}><h2>{t.newsletterTitle}</h2><p>{t.newsletterText}</p><form onSubmit={onNewsletterSubmit} style={{ display: 'grid', gap: '18px', maxWidth: '520px', marginTop: '24px' }}><div className="field"><label htmlFor="newsletter-name">{t.name}</label><input id="newsletter-name" name="name" required autoComplete="name" /></div><div className="field"><label htmlFor="newsletter-email">{t.email}</label><input id="newsletter-email" name="email" type="email" required autoComplete="email" /></div><label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+  <input
+    type="checkbox"
+    name="newsletterConsent"
+    required
+    style={{ marginTop: '4px' }}
+  />
+  <span>
+    {lang === 'hu'
+      ? 'Hozzájárulok, hogy az Iránytű Neurodiverz Karrier Műhely hírleveleket küldjön nekem e-mailben.'
+      : lang === 'de'
+      ? 'Ich stimme zu, E-Mail-Newsletter von Iránytű Neurodiverz Karrier Műhely zu erhalten.'
+      : 'I agree to receive email newsletters from Iránytű Neurodiverz Karrier Műhely.'}
+  </span>
+  <div
+  id="newsletter-turnstile"
+  style={{ marginTop: '8px', marginBottom: '8px' }}
+/>
+</label>
+<button type="submit" className="button">{t.newsletterSubmit}<ArrowRight size={16} /></button></form></section>}
         {page === 'privacy' && (
   <section className="privacy-document">
           <h2>Adatkezelési Tájékoztató</h2>
