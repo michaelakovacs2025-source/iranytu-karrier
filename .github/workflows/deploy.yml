@@ -1,0 +1,58 @@
+
+name: Iránytű weboldal közzététele
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Projekt letöltése
+        uses: actions/checkout@v4
+
+      - name: pnpm telepítése
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Node.js beállítása
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Függőségek telepítése
+        run: pnpm install --frozen-lockfile
+
+      - name: Weboldal összeállítása
+        env:
+          BASE_PATH: /iranytu-karrier/
+        run: pnpm --dir artifacts/iranytu-karrier exec vite build
+
+      - name: GitHub Pages beállítása
+        uses: actions/configure-pages@v5
+
+      - name: Weboldal feltöltése
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/iranytu-karrier/dist/public
+
+      - name: Weboldal közzététele
+        id: deployment
+        uses: actions/deploy-pages@v4
