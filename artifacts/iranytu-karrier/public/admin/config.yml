@@ -1,0 +1,48 @@
+backend:
+  name: github
+  repo: michaelakovacs2025-source/iranytu-karrier
+  branch: main
+  base_url: https://iranytu-sveltia-auth.michaela-kovacs2025.workers.dev
+
+
+
+media_folder: "artifacts/iranytu-karrier/public/images/articles"
+public_folder: "/iranytu-karrier/images/articles"
+
+collections:
+  - name: "articles"
+    label: "Cikkek"
+    folder: "artifacts/iranytu-karrier/content/articles"
+    create: true
+    slug: "{{slug}}"
+    extension: "md"
+    format: "frontmatter"
+    fields:
+      - label: "Cím"
+        name: "title"
+        widget: "string"
+
+      - label: "Megjelenés dátuma"
+        name: "date"
+        widget: "datetime"
+
+      - label: "Rövid leírás"
+        name: "description"
+        widget: "text"
+
+      - label: "Borítókép"
+        name: "image"
+        widget: "image"
+        required: false
+
+      - label: "Nyelv"
+        name: "language"
+        widget: "select"
+        options:
+          - { label: "Magyar", value: "hu" }
+          - { label: "Angol", value: "en" }
+          - { label: "Német", value: "de" }
+
+      - label: "Cikk szövege"
+        name: "body"
+        widget: "markdown"
