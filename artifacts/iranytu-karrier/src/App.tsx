@@ -347,7 +347,8 @@ const copy = {
 
 const pageNames = Object.keys(paths) as PageKey[];
 const serviceItems: MenuPage[] = ['career', 'supervision', 'workshops'];
-const resourceItems: MenuPage[] = ['articles', 'videos', 'faq'];
+const resourceItems: MenuPage[] = ['videos', 'faq'];
+
 
 function resolvePath(path: string): { lang: Language; key: PageKey } {
   const parts = path.split('/').filter(Boolean);
@@ -972,15 +973,7 @@ useEffect(() => {
       </a>
     </div>
 
-    <AppLink
-      lang={lang}
-      page="articles"
-      className="text-link video-articles"
-      data-testid="link-videos-articles"
-    >
-      {t.nav.articles}
-      <ArrowRight size={15} />
-    </AppLink>
+
   </div>
 )}
 
@@ -1227,7 +1220,7 @@ function CTA({ lang, t, disclaimer }: { lang: Language; t: Translation; disclaim
 }
 
 function Footer({ lang, t }: { lang: Language; t: Translation }) {
-  return <footer className="footer"><div className="container"><div className="footer-grid"><div><div className="footer-brand">{t.footerLine}</div><p>{t.homeNote} {t.homeIntro}</p></div><div><h3>{t.explore}</h3><div className="footer-links"><AppLink lang={lang} page="about" data-testid="footer-about">{t.nav.about}</AppLink><AppLink lang={lang} page="career" data-testid="footer-career">{t.nav.career}</AppLink><AppLink lang={lang} page="workshops" data-testid="footer-workshops">{t.nav.workshops}</AppLink><AppLink lang={lang} page="prices" data-testid="footer-prices">{t.nav.prices}</AppLink><AppLink lang={lang} page="articles" data-testid="footer-articles">{t.nav.articles}</AppLink></div></div><div><h3>{t.footerContact}</h3><div className="footer-links"><AppLink lang={lang} page="contact" data-testid="footer-contact">{t.nav.contact}</AppLink><AppLink lang={lang} page="faq" data-testid="footer-faq">{t.nav.faq}</AppLink><AppLink lang={lang} page="privacy" data-testid="footer-privacy">{t.cookie}</AppLink><AppLink lang={lang} page="imprint" data-testid="footer-imprint">{t.imprint}</AppLink></div></div></div><div className="footer-bottom"><span>© {new Date().getFullYear()} {t.brand} · {t.copyright}</span><span>{lang === 'hu' ? 'Elfogadó, gyakorlatias karriertámogatás.' : lang === 'de' ? 'Wertschätzende, praktische Karrierebegleitung.' : 'Respectful, practical career support.'}</span></div></div></footer>;
+  return <footer className="footer"><div className="container"><div className="footer-grid"><div><div className="footer-brand">{t.footerLine}</div><p>{t.homeNote} {t.homeIntro}</p></div><div><h3>{t.explore}</h3><div className="footer-links"><AppLink lang={lang} page="about" data-testid="footer-about">{t.nav.about}</AppLink><AppLink lang={lang} page="career" data-testid="footer-career">{t.nav.career}</AppLink><AppLink lang={lang} page="workshops" data-testid="footer-workshops">{t.nav.workshops}</AppLink><AppLink lang={lang} page="prices" data-testid="footer-prices">{t.nav.prices}</AppLink></div></div><div><h3>{t.footerContact}</h3><div className="footer-links"><AppLink lang={lang} page="contact" data-testid="footer-contact">{t.nav.contact}</AppLink><AppLink lang={lang} page="faq" data-testid="footer-faq">{t.nav.faq}</AppLink><AppLink lang={lang} page="privacy" data-testid="footer-privacy">{t.cookie}</AppLink><AppLink lang={lang} page="imprint" data-testid="footer-imprint">{t.imprint}</AppLink></div></div></div><div className="footer-bottom"><span>© {new Date().getFullYear()} {t.brand} · {t.copyright}</span><span>{lang === 'hu' ? 'Elfogadó, gyakorlatias karriertámogatás.' : lang === 'de' ? 'Wertschätzende, praktische Karrierebegleitung.' : 'Respectful, practical career support.'}</span></div></div></footer>;
 }
 
 function App() {
